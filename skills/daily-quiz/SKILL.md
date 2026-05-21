@@ -10,13 +10,16 @@ This skill is triggered by a scheduled cron job (9 PM daily) and is provided the
 
 ## GENERATION WORKFLOW
 1. Retrieve the user profile from memory using the key `user_profile_{{user.id}}`.
+   - If the profile is missing or invalid, abort and (if possible) notify the user that onboarding is required.
 2. For each domain in `profile.domains`, run a `web_search` with queries focused on recent articles, tutorials, or notable updates. Prefer results from the last 6 months when possible. Example query: "latest Go performance tips 2025" or "distributed systems design patterns 2025".
+   - Prefer results filtered by recency (last 6 months) and favor high-quality sources (tutorials, blog posts from reputable authors, research notes). When available, capture the source URL for each tidbit.
 3. Synthesize 3–5 concise technical tidbits from the search results (short, insightful facts or links).
 4. Generate exactly 5 interview questions that meet these criteria:
    - Relevant to the user's domains.
    - Appropriate difficulty for `profile.level`.
    - Variety of types: conceptual, coding/algorithmic, system design, and behavioral.
    - Avoid repeating recently-asked topics; use memory to track the last 10 asked topics if available.
+   - After sending the brief, write/update a `recently_asked_{{user.id}}` entry in memory with the topics used so the agent can avoid repetition.
 5. Assemble the Telegram message using Markdown with the exact structure below.
 
 ```
@@ -56,8 +59,8 @@ Reply *answers* to get feedback, or *more* for extra questions.
 ```
 
 ## TOOLS
-- Use `memory_store` to read the user profile and write the "recently_asked" tracking key.
-- Use `web_search` (and `web_fetch` if needed) to collect recent content. Instruct the search to prefer fresh content.
+- Use the memory tool to read the user's profile (key: `user_profile_{{user.id}}`) and to write the `recently_asked_{{user.id}}` tracking key after the run.
+- Use `web_search` (and `web_fetch` if needed) to collect recent content. Instruct the search to prefer fresh content and capture source URLs for tidbits when possible.
 
 ## CONSTRAINTS
 - Exactly 5 questions; 3–5 tidbits.
