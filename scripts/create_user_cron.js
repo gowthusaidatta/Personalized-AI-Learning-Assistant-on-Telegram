@@ -1,42 +1,64 @@
 #!/usr/bin/env node
-// create_user_cron.js
-// Reads a user's profile from OpenClaw memory and registers a cron job using the user's timezone.
 
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
+
+function runOpenClaw(args, options = {}) {
+  const result = spawnSync('openclaw', args, {
+    encoding: 'utf8',
+    stdio: options.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe']
+  });
+
+  if (result.status !== 0) {
+    const message = result.stderr || result.stdout || `openclaw exited with ${result.status}`;
+    throw new Error(message.trim());
+  }
+
+  return result.stdout.trim();
+}
 
 function getUserProfile(userId) {
-  try {
-    const out = execSync(`openclaw memory get "user_profile_${userId}"`, { encoding: 'utf8' });
-    return JSON.parse(out);
-  } catch (e) {
-    console.error('Failed to read user profile:', e.message);
-    process.exit(1);
-  }
+  const output = runOpenClaw(['memory', 'get', `user_profile_${userId}`]);
+  return JSON.parse(output);
 }
 
 function addCronForUser(userId, timezone) {
-  const msg = `Run the daily-quiz skill for user ${userId} and send the result via Telegram.`;
-  const cmd = `openclaw cron add --name "nightly-tech-brief" --cron "0 21 * * *" --tz "${timezone}" --session isolated --message "${msg}" --announce --channel telegram`;
-  console.log('Running:', cmd);
-  try {
-    const out = execSync(cmd, { stdio: 'inherit' });
-  } catch (e) {
-    console.error('Failed to add cron job:', e.message);
-    process.exit(1);
-  }
-}
-
-if (process.argv.length < 3) {
-  console.error('Usage: node create_user_cron.js <userId>');
-  process.exit(2);
+  const message = `Run the daily-quiz skill for user ${userId} and send the result via Telegram.`;
+  runOpenClaw([
+    'cron',
+    'add',
+    '--name',
+    'nightly-tech-brief',
+    '--cron',
+    '0 21 * * *',
+    '--tz',
+    timezone,
+    '--session',
+    'isolated',
+    '--message',
+    message,
+    '--announce',
+    '--channel',
+    'telegram'
+  ], { inherit: true });
 }
 
 const userId = process.argv[2];
-const profile = getUserProfile(userId);
 
-if (!profile || !profile.timezone) {
-  console.error('Profile missing or timezone not set.');
-  process.exit(1);
+if (!userId) {
+  console.error('Usage: node scripts/create_user_cron.js <telegram-user-id>');
+  process.exit(2);
 }
 
-addCronForUser(userId, profile.timezone);
+try {
+  const profile = getUserProfile(userId);
+
+  if (!profile || typeof profile.timezone !== 'string' || profile.timezone.trim() === '') {
+    throw new Error('Profile is missing a timezone.');
+  }
+
+  addCronForUser(userId, profile.timezone.trim());
+  console.log(`Registered nightly-tech-brief for user ${userId} at 21:00 ${profile.timezone.trim()}.`);
+} catch (error) {
+  console.error(`Failed to register user cron: ${error.message}`);
+  process.exit(1);
+}

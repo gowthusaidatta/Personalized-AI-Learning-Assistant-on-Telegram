@@ -1,43 +1,46 @@
 const fs = require('fs');
 const assert = require('assert');
 
-function exists(p){
-  if(!fs.existsSync(p)) throw new Error(`Missing required file: ${p}`);
+function read(path) {
+  assert.ok(fs.existsSync(path), `Missing required file: ${path}`);
+  return fs.readFileSync(path, 'utf8');
 }
 
-function contains(p, substr){
-  const s = fs.readFileSync(p,'utf8');
-  if(!s.includes(substr)) throw new Error(`File ${p} does not contain required text: ${substr}`);
+function includes(path, text) {
+  const content = read(path);
+  assert.ok(content.includes(text), `${path} must include: ${text}`);
 }
 
-try{
-  console.log('Running repository checks...');
+console.log('Running repository checks...');
 
-  exists('skills/user-onboarding/SKILL.md');
-  contains('skills/user-onboarding/SKILL.md','user_profile_{{user.id}}');
-  contains('skills/user-onboarding/SKILL.md','timezone');
+includes('skills/user-onboarding/SKILL.md', 'user_profile_{{user.id}}');
+includes('skills/user-onboarding/SKILL.md', 'memory_store');
+includes('skills/user-onboarding/SKILL.md', '"domains": ["string"]');
+includes('skills/user-onboarding/SKILL.md', '"level": "string"');
+includes('skills/user-onboarding/SKILL.md', '"goals": ["string"]');
+includes('skills/user-onboarding/SKILL.md', '"timezone": "string"');
 
-  exists('skills/daily-quiz/SKILL.md');
-  contains('skills/daily-quiz/SKILL.md','🦞 *Your Daily Tech Brief*');
-  contains('skills/daily-quiz/SKILL.md','web_search');
-  contains('skills/daily-quiz/SKILL.md','Exactly 5 interview questions');
+includes('skills/daily-quiz/SKILL.md', '🦞 *Your Daily Tech Brief*');
+includes('skills/daily-quiz/SKILL.md', '🧠 *Interview Questions*');
+includes('skills/daily-quiz/SKILL.md', "💡 *Today's Tidbits*");
+includes('skills/daily-quiz/SKILL.md', 'web_search');
+includes('skills/daily-quiz/SKILL.md', 'exactly 5');
+includes('skills/daily-quiz/SKILL.md', '3-5');
 
-  exists('config/openclaw.json');
-  contains('config/openclaw.json','telegram');
-  contains('config/openclaw.json','${env.TELEGRAM_BOT_TOKEN}');
+includes('config/openclaw.json', '"provider": "ollama"');
+includes('config/openclaw.json', '"telegram"');
+includes('config/openclaw.json', '${env.TELEGRAM_BOT_TOKEN}');
 
-  exists('Dockerfile');
-  exists('docker-compose.yml');
+read('Dockerfile');
+read('docker-compose.yml');
 
-  exists('.env.example');
-  contains('.env.example','TELEGRAM_BOT_TOKEN');
+includes('.env.example', 'TELEGRAM_BOT_TOKEN');
+includes('.env.example', 'OLLAMA_URL');
+includes('.env.example', 'OPENCLAW_MODEL');
 
-  exists('README.md');
-  contains('README.md','openclaw cron trigger');
+includes('README.md', 'Standing Order');
+includes('README.md', 'nightly-tech-brief');
+includes('README.md', '0 21 * * *');
+includes('README.md', 'docker compose up --build');
 
-  console.log('All checks passed.');
-  process.exit(0);
-} catch (err){
-  console.error('Test failed:', err.message);
-  process.exit(2);
-}
+console.log('All checks passed.');
