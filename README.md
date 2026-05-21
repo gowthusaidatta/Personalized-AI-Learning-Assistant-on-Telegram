@@ -1,120 +1,226 @@
-# Personalized AI Learning Assistant on Telegram (OpenClaw)
+# Personalized AI Learning Assistant on Telegram
 
-## Overview
-This project implements a personalized daily learning assistant that runs on Telegram using the OpenClaw gateway. It onboards users, stores their preferences, searches the web daily for fresh content, and delivers a formatted daily brief with 5 interview questions and 3–5 technical tidbits.
+This project configures an OpenClaw-powered Telegram bot that onboards users, stores their learning preferences, searches the web for fresh technical content, and sends a personalized daily brief every evening.
 
-## Repository layout
-- skills/
-  - user-onboarding/SKILL.md
-  - daily-quiz/SKILL.md
-- config/
-  - openclaw.json
-- Dockerfile
-- docker-compose.yml
-- .env.example
-- README.md
+## What It Does
+- Onboards every new Telegram user with a short conversational flow.
+- Stores the user's domains, experience level, goals, and timezone in OpenClaw persistent memory.
+- Runs a scheduled OpenClaw cron job named `nightly-tech-brief` at 9:00 PM.
+- Uses `web_search` during daily quiz generation to find recent content for the user's domains.
+- Sends a Telegram Markdown message titled `🦞 *Your Daily Tech Brief* — [Date]` with exactly 5 interview questions and 3-5 tidbits.
 
-## Quickstart (Local, recommended for development)
-1. Install Node.js (LTS) and npm.
-2. Install OpenClaw globally:
+## Repository Layout
+```text
+.
+├── config/openclaw.json
+├── skills/
+│   ├── user-onboarding/SKILL.md
+│   └── daily-quiz/SKILL.md
+├── scripts/
+│   ├── register_triggers.ps1
+│   ├── register_triggers.sh
+│   └── create_user_cron.js
+├── .github/workflows/ci.yml
+├── tests/run_tests.js
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+└── README.md
+```
+
+## Prerequisites
+- Node.js LTS and npm
+- OpenClaw CLI
+- Telegram bot token from `@BotFather`
+- Ollama with a local model, or another OpenClaw-supported model provider
+
+Install OpenClaw:
 
 ```bash
 npm i -g openclaw
+openclaw --version
 ```
 
-3. Ensure you have a model provider available:
-- Recommended: install and run Ollama locally (`ollama serve`).
-- Alternatively, configure a cloud model and set the model provider in `config/openclaw.json`.
-
-4. Configure your Telegram bot token in a `.env` file based on `.env.example`.
-
-5. Start the gateway locally:
+For the recommended local model setup:
 
 ```bash
-openclaw gateway start
+ollama pull llama3:8b
+ollama serve
 ```
 
-6. Test onboarding by messaging your bot from Telegram (use a separate account or clear chat to simulate a new user).
+## Configuration
+Copy the environment template and fill in values:
 
-7. Manually trigger the nightly job for testing:
+```bash
+cp .env.example .env
+```
+
+The included [config/openclaw.json](config/openclaw.json) uses environment variables, so no real secrets are committed:
+
+```json
+{
+  "gateway": {
+    "name": "personal-learning-assistant"
+  },
+  "model": {
+    "provider": "ollama",
+    "providerConfig": {
+      "url": "${env.OLLAMA_URL:-http://localhost:11434}",
+      "model": "${env.OPENCLAW_MODEL:-llama3:8b}"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true,
+        "package": "@openclaw/plugin-telegram",
+        "config": {
+          "botToken": "${env.TELEGRAM_BOT_TOKEN}"
+        }
+      }
+    }
+  },
+  "tools": {
+    "web_search": {
+      "provider": "duckduckgo",
+      "config": {}
+    }
+  }
+}
+```
+
+## Skills
+The submission includes both required OpenClaw skills:
+
+- [skills/user-onboarding/SKILL.md](skills/user-onboarding/SKILL.md): asks for technical domains, experience level, learning goals, and timezone, then stores the profile at `user_profile_{{user.id}}`.
+- [skills/daily-quiz/SKILL.md](skills/daily-quiz/SKILL.md): reads the profile, invokes `web_search`, generates exactly 5 interview questions and 3-5 tidbits, and formats the Telegram message.
+
+Stored profile schema:
+
+```json
+{
+  "domains": ["string"],
+  "level": "string",
+  "goals": ["string"],
+  "timezone": "string"
+}
+```
+
+## Onboarding Trigger
+This project uses an OpenClaw Standing Order instead of a custom webhook.
+
+Rationale: a Standing Order is declarative, simple to reproduce, survives gateway restarts, and directly matches the requirement: when a Telegram user has no `user_profile_{{user.id}}` memory entry, the `user-onboarding` skill should run automatically.
+
+Register it:
+
+```bash
+openclaw standing-orders add \
+  --name "trigger-user-onboarding" \
+  --if "memory.user_profile_{{user.id}} does not exist" \
+  --run-skill "user-onboarding"
+```
+
+Windows PowerShell users can also run:
+
+```powershell
+.\scripts\register_triggers.ps1
+```
+
+## Daily Cron Job
+The required cron job is named `nightly-tech-brief` and uses the schedule `0 21 * * *`.
+
+After onboarding, register the user's cron using their stored timezone:
+
+```bash
+node ./scripts/create_user_cron.js <telegram-user-id>
+```
+
+The helper script reads `user_profile_<telegram-user-id>` from OpenClaw memory, extracts `timezone`, and runs:
+
+```bash
+openclaw cron add \
+  --name "nightly-tech-brief" \
+  --cron "0 21 * * *" \
+  --tz "<stored-user-timezone>" \
+  --session isolated \
+  --message "Run the daily-quiz skill for user <telegram-user-id> and send the result via Telegram." \
+  --announce \
+  --channel telegram
+```
+
+To trigger it manually for testing:
 
 ```bash
 openclaw cron trigger "nightly-tech-brief"
 ```
 
-## Containerized setup (Docker)
-1. Copy `.env.example` to `.env` and fill values.
-2. Build and run with Docker Compose:
+## Run Locally
+1. Copy the skills into your OpenClaw home, or run from this repo if your OpenClaw setup loads local skills.
+2. Copy `config/openclaw.json` to `~/.openclaw/openclaw.json`, or point OpenClaw at this config.
+3. Start the gateway:
 
 ```bash
-docker compose up --build -d
+openclaw gateway start
 ```
 
-Notes:
-- The container copies `config/openclaw.json` and `skills/` into the image; you can also mount them as volumes to iterate quickly.
-- Ollama typically runs on the host; if you run Ollama in a container, add it to `docker-compose.yml` and point `OLLAMA_URL` accordingly.
-
-## Registering triggers (Standing Order + Cron)
-
-This project includes convenience scripts to register the onboarding standing order and a placeholder cron job. There are two options:
-
-- Use the provided scripts (PowerShell or Bash):
-
-```powershell
-# Windows PowerShell
-.\scripts\register_triggers.ps1
-```
+4. Message your Telegram bot.
+5. Complete onboarding.
+6. Confirm memory:
 
 ```bash
-# macOS / Linux
-sh ./scripts/register_triggers.sh
+openclaw memory get "user_profile_<telegram-user-id>"
 ```
 
-- Create a cron for a specific user (uses `openclaw memory get` and `openclaw cron add`):
+7. Trigger the nightly job manually:
 
 ```bash
-# Example: register nightly cron for user with ID 12345
-node ./scripts/create_user_cron.js 12345
+openclaw cron trigger "nightly-tech-brief"
 ```
 
-The `create_user_cron.js` script reads `user_profile_<id>` from OpenClaw memory, extracts the `timezone` field, and registers a cron job named `nightly-tech-brief` that runs at 21:00 in that timezone. This satisfies the requirement to run the daily-quiz in the user's local timezone.
-
-## Configuration snippet
-See the included configuration at [config/openclaw.json](config/openclaw.json).
-
-Important: never commit real secrets. Use environment variables (see `.env.example`) and reference them in `openclaw.json` as shown.
-
-## Onboarding trigger: Standing Order vs Webhook
-- Design choice: This submission uses a **Standing Order** approach for onboarding. Reasoning:
-  - Standing Orders are simple to implement with OpenClaw and can be defined declaratively to run the onboarding skill when a profile is not present.
-  - They are robust to restarts and ensure onboarding runs automatically the first time a new user messages the bot.
-  - A webhook approach is also valid but requires additional custom code to inspect messages and decide which skill to invoke.
-
-If you prefer a webhook or custom trigger, the README can be extended with instructions.
-
-## Submission checklist
-- [x] `skills/user-onboarding/SKILL.md`
-- [x] `skills/daily-quiz/SKILL.md`
-- [x] `config/openclaw.json` (no secrets)
-- [x] `Dockerfile` and `docker-compose.yml`
-- [x] `.env.example`
-
-## Next steps / Testing recommendations
-- Run the gateway and test onboarding flow.
-- Trigger `openclaw cron trigger "nightly-tech-brief"` to validate daily-quiz behavior.
-- Iterate on `SKILL.md` prompts for improved question quality.
-
-## Automated checks
-This repository includes a small test harness that verifies the presence and basic contents of required files. It requires only Node.js to run.
-
-Install (if you don't have Node) and run the tests:
+## Run With Docker
+Copy `.env.example` to `.env`, then run:
 
 ```bash
-# From the project root
+docker compose up --build
+```
+
+The container mounts:
+
+- `./skills` to `/root/.openclaw/skills`
+- `./config/openclaw.json` to `/root/.openclaw/openclaw.json`
+
+If Ollama runs on your host machine, set `OLLAMA_URL` in `.env` to a host-reachable URL such as `http://host.docker.internal:11434` on Docker Desktop.
+
+## Testing
+Run the repository checks:
+
+```bash
 npm test
 ```
 
-The test runner checks for the two `SKILL.md` files, `config/openclaw.json`, the Docker files, and that `.env.example` contains the `TELEGRAM_BOT_TOKEN` variable.
+The test harness verifies the required files, skill content, Telegram/OpenClaw config, Docker files, `.env.example`, and README references.
 
-## Contact
-If you find issues or want help testing, open an issue in the repo or message me directly.
+## Continuous Integration
+This repository includes [.github/workflows/ci.yml](.github/workflows/ci.yml), which runs `npm test` on pushes to `main` and on pull requests.
+
+## Troubleshooting
+- If `openclaw` is not recognized, install the OpenClaw CLI and ensure it is on your `PATH` before running the gateway or cron commands.
+- If `sh` is unavailable on Windows, use the PowerShell script instead:
+
+```powershell
+.\scripts\register_triggers.ps1
+```
+- If Ollama runs on the host machine with Docker Desktop, use `OLLAMA_URL=http://host.docker.internal:11434` in `.env`.
+
+## Submission Checklist
+- [x] `skills/user-onboarding/SKILL.md`
+- [x] `skills/daily-quiz/SKILL.md`
+- [x] Persistent memory schema documented and instructed in onboarding
+- [x] Standing Order onboarding trigger documented
+- [x] `nightly-tech-brief` cron command documented with `0 21 * * *`
+- [x] Telegram Markdown daily brief format documented in the daily quiz skill
+- [x] `config/openclaw.json` snippet with model and Telegram plugin
+- [x] No real secrets committed
+- [x] `Dockerfile`
+- [x] `docker-compose.yml`
+- [x] `.env.example`
