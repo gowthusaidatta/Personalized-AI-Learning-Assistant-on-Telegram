@@ -203,6 +203,9 @@ The test harness verifies the required files, skill content, Telegram/OpenClaw c
 ## Continuous Integration
 This repository includes [.github/workflows/ci.yml](.github/workflows/ci.yml), which runs `npm test` on pushes to `main` and on pull requests.
 
+## Generated Eval Files
+The `evals/` directory is used by the local Chat Customizations Evaluations tooling and is ignored by Git so it does not affect the submission package.
+
 ## Troubleshooting
 - If `openclaw` is not recognized, install the OpenClaw CLI and ensure it is on your `PATH` before running the gateway or cron commands.
 - If `sh` is unavailable on Windows, use the PowerShell script instead:
