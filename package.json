@@ -1,0 +1,11 @@
+{
+  "name": "personalized-ai-learning-assistant",
+  "version": "1.0.0",
+  "description": "OpenClaw-based Telegram learning assistant",
+  "main": "index.js",
+  "scripts": {
+    "test": "node tests/run_tests.js"
+  },
+  "author": "",
+  "license": "MIT"
+}

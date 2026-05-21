@@ -1,0 +1,29 @@
+{
+  "gateway": {
+    "name": "personal-learning-assistant"
+  },
+  "model": {
+    "provider": "ollama",
+    "providerConfig": {
+      "url": "${env.OLLAMA_URL:-http://localhost:11434}",
+      "model": "${env.OPENCLAW_MODEL:-llama3:8b}"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true,
+        "package": "@openclaw/plugin-telegram",
+        "config": {
+          "botToken": "${env.TELEGRAM_BOT_TOKEN}"
+        }
+      }
+    }
+  },
+  "tools": {
+    "web_search": {
+      "provider": "duckduckgo",
+      "config": {}
+    }
+  }
+}

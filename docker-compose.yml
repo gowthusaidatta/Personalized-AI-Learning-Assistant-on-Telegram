@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  openclaw:
+    build: .
+    container_name: openclaw-agent
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./skills:/root/.openclaw/skills:ro
+      - ./config/openclaw.json:/root/.openclaw/openclaw.json:ro
+    command: ["openclaw","gateway","start"]
+    # If you run Ollama in a container, add it here and expose the appropriate port.
+
+# Optional: you can add a 'ollama' service if you have a containerized Ollama image
+# and want to orchestrate it here. Many users run Ollama locally instead.
